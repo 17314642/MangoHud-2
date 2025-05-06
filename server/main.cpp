@@ -1,7 +1,7 @@
 #include <thread>
 #include <chrono>
 
-#include "intel.hpp"
+#include "gpu.hpp"
 
 int main() {
     spdlog::set_level(spdlog::level::level_enum::trace);
