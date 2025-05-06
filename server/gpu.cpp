@@ -2,6 +2,7 @@
 
 #include "gpu.hpp"
 #include "intel.hpp"
+#include "amdgpu.hpp"
 #include "../common/helpers.hpp"
 
 GPUS::GPUS() {
@@ -71,6 +72,8 @@ GPUS::GPUS() {
 
         if (vendor_id == 0x8086) {
             gpu = std::make_shared<Intel>(drm_node, pci_dev, vendor_id, device_id);
+        } else if (vendor_id == 0x1002) {
+            gpu = std::make_shared<AMDGPU>(drm_node, pci_dev, vendor_id, device_id);
         } else {
             continue;
         }
