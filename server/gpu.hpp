@@ -178,7 +178,6 @@ public:
 class GPUWithHwmon : public GPU {
 protected:
     Hwmon hwmon;
-    std::vector<hwmon_sensor> hwmon_sensors;
 
     void poll_overrides() override {
         hwmon.poll_sensors();

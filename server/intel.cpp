@@ -5,8 +5,11 @@ Intel::Intel(
     uint16_t vendor_id, uint16_t device_id
 ) : GPUWithHwmon(drm_node, pci_dev, vendor_id, device_id) {
     pthread_setname_np(worker_thread.native_handle(), "gpu-intel");
+    init_hwmon();
+}
 
-    hwmon_sensors = {
+void Intel::init_hwmon() {
+    const std::vector<hwmon_sensor> sensors = {
         { "voltage"     , "in0_input"       },
         { "fan_speed"   , "fan1_input"      },
         { "temp"        , "temp1_input"     },
@@ -16,7 +19,7 @@ Intel::Intel(
 
     hwmon.drm_node = drm_node;
     hwmon.base_dir = hwmon.find_hwmon_dir();
-    hwmon.add_sensors(hwmon_sensors);
+    hwmon.add_sensors(sensors);
     hwmon.setup();
 }
 

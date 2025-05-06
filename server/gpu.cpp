@@ -71,6 +71,8 @@ GPUS::GPUS() {
 
         if (vendor_id == 0x8086) {
             gpu = std::make_shared<Intel>(drm_node, pci_dev, vendor_id, device_id);
+        } else {
+            continue;
         }
 
         available_gpus.push_back(gpu);

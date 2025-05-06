@@ -32,6 +32,8 @@ public:
         uint16_t vendor_id, uint16_t device_id
     );
 
+    void init_hwmon();
+
     gpu_metrics get_metrics() override;
     int get_temperature() override;
     float get_power_usage() override;
