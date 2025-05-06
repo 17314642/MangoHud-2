@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "gpu.hpp"
+#include "hwmon.hpp"
 
 // class IntelThrottling : Throttling {
 //     std::ifstream throttle_status_stream;

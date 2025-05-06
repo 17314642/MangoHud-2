@@ -14,8 +14,6 @@
 #include <pthread.h>
 #include <spdlog/spdlog.h>
 
-#include "hwmon.hpp"
-
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
 
@@ -173,20 +171,6 @@ public:
         std::unique_lock lock(metrics_mutex);
         return metrics;
     }
-};
-
-class GPUWithHwmon : public GPU {
-protected:
-    Hwmon hwmon;
-
-    void poll_overrides() override {
-        hwmon.poll_sensors();
-    }
-
-    GPUWithHwmon(
-        const std::string drm_node, const std::string pci_dev,
-        uint16_t vendor_id, uint16_t device_id
-    ) : GPU(drm_node, pci_dev, vendor_id, device_id) {}
 };
 
 class GPUS {

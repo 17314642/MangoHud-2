@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "gpu.hpp"
+#include "hwmon.hpp"
 
 class AMDGPU : public GPUWithHwmon {
 private:
