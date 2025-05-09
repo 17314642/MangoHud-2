@@ -10,6 +10,7 @@
 #include <regex>
 #include <fstream>
 #include <filesystem>
+#include <set>
 
 #include <pthread.h>
 #include <spdlog/spdlog.h>
@@ -17,11 +18,16 @@
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
 
-struct gpu_metrics {
+struct gpu_metrics_process {
     int     load;
-    
-    float   sys_vram_used;
-    float   proc_vram_used;
+    float   vram_used;
+    float   gtt_used;
+};
+
+struct gpu_metrics_system {
+    int     load;
+
+    float   vram_used;
     float   gtt_used;
     float   memory_total;
     int     memory_clock;
@@ -46,79 +52,28 @@ struct gpu_metrics {
 
     int     fan_speed;
     bool    fan_rpm;
-
-    void print() {
-        SPDLOG_TRACE("==========================");
-        SPDLOG_TRACE("load                 = {}\n", load);
-
-        SPDLOG_TRACE("sys_vram_used        = {}", sys_vram_used);
-        SPDLOG_TRACE("proc_vram_used       = {}", proc_vram_used);
-        SPDLOG_TRACE("gtt_used             = {}", gtt_used);
-        SPDLOG_TRACE("memory_total         = {}", memory_total);
-        SPDLOG_TRACE("memory_clock         = {}", memory_clock);
-        SPDLOG_TRACE("memory_temp          = {}\n", memory_temp);
-
-        SPDLOG_TRACE("temperature          = {}", temperature);
-        SPDLOG_TRACE("junction_temperature = {}\n", junction_temperature);
-
-        SPDLOG_TRACE("core_clock           = {}", core_clock);
-        SPDLOG_TRACE("voltage              = {}\n", voltage);
-
-        SPDLOG_TRACE("power_usage          = {}", power_usage);
-        SPDLOG_TRACE("power_limit          = {}\n", power_limit);
-
-        SPDLOG_TRACE("apu_cpu_power        = {}", apu_cpu_power);
-        SPDLOG_TRACE("apu_cpu_temp         = {}\n", apu_cpu_temp);
-
-        SPDLOG_TRACE("is_power_throttled   = {}", is_power_throttled);
-        SPDLOG_TRACE("is_current_throttled = {}", is_current_throttled);
-        SPDLOG_TRACE("is_temp_throttled    = {}", is_temp_throttled);
-        SPDLOG_TRACE("is_other_throttled   = {}\n", is_other_throttled);
-
-        SPDLOG_TRACE("fan_speed            = {}", fan_speed);
-        SPDLOG_TRACE("fan_rpm              = {}", fan_rpm);
-        SPDLOG_TRACE("==========================\n");
-    }
 };
-
-class Throttling {
-public:
-    bool is_power_throttled     () { return false; };
-    bool is_current_throttled   () { return false; };
-    bool is_temp_throttled      () { return false; };
-    bool is_other_throttled     () { return false; };
-};
-    
-// class FDInfo {
-// private:
-//     std::vector<std::ifstream> fdinfo;
-//     uint64_t fdinfo_last_update_ms = 0;
-
-// public:
-//     std::string drm_engine_type = "EMPTY";
-//     std::string drm_memory_type = "EMPTY";
-
-//     std::vector<std::map<std::string, std::string>> parsed_data;
-
-//     void poll();
-//     void find_fds();
-//     void open_fd(std::string path);
-// };
 
 class GPU {
 protected:
-    gpu_metrics metrics = {};
-    std::mutex metrics_mutex;
+    gpu_metrics_system system_metrics = {};
+    std::map<pid_t, gpu_metrics_process> process_metrics;
+
+    std::mutex system_metrics_mutex, process_metrics_mutex;
 
     std::thread worker_thread;
 
+    std::chrono::time_point<std::chrono::steady_clock> previous_time;
+    std::chrono::nanoseconds delta_time_ns;
+
     virtual void poll_overrides() {}
     void poll();
+    void check_pids_existence();
 
+    // System-related functions
     virtual int     get_load()                  { return 0; }
 
-    virtual float   get_sys_vram_used()         { return 0.f; }
-    virtual float   get_proc_vram_used()        { return 0.f; }
+    virtual float   get_vram_used()             { return 0.f; }
     virtual float   get_gtt_used()              { return 0.f; }
     virtual float   get_memory_total()          { return 0.f; }
     virtual int     get_memory_clock()          { return 0; }
@@ -144,6 +99,11 @@ protected:
     virtual int     get_fan_speed()             { return 0; }
     virtual bool    get_fan_rpm()               { return false; }
 
+    // Process-related functions
+    virtual int     get_process_load(pid_t pid)         { return 0; }
+    virtual float   get_process_vram_used(pid_t pid)    { return 0.f; }
+    virtual float   get_process_gtt_used(pid_t pid)     { return 0.f; }
+
 public:
     const std::string drm_node;
     const std::string pci_dev;
@@ -153,29 +113,21 @@ public:
     std::atomic<bool> is_active = false;
     std::atomic<bool> stop_thread = false;
 
-    GPU(
-        const std::string drm_node, const std::string pci_dev,
-        uint16_t vendor_id, uint16_t device_id
-    ) : drm_node(drm_node), pci_dev(pci_dev), vendor_id(vendor_id), device_id(device_id) {
-        worker_thread = std::thread(&GPU::poll, this);
-    }
+    GPU(const std::string& drm_node, const std::string& pci_dev,
+        uint16_t vendor_id, uint16_t device_id);
 
-    ~GPU() {
-        stop_thread = true;
-        if (worker_thread.joinable())
-            worker_thread.join();
-    }
+    ~GPU();
 
-    virtual gpu_metrics get_metrics() {
-        SPDLOG_DEBUG("GPU get_metrics()");
-        std::unique_lock lock(metrics_mutex);
-        return metrics;
-    }
+    void add_pid(pid_t pid);
+    void print_metrics();
+
+    virtual gpu_metrics_system get_system_metrics();
+    virtual std::map<pid_t, gpu_metrics_process> get_process_metrics();
 };
 
 class GPUS {
 private:
-    std::string get_pci_device_address(const std::string drm_card_path);
+    std::string get_pci_device_address(const std::string& drm_card_path);
 
 public:
     std::vector<std::shared_ptr<GPU>> available_gpus;

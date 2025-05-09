@@ -1,7 +1,7 @@
 #include <fstream>
 #include "helpers.hpp"
 
-std::string read_line(const std::string filename)
+std::string read_line(const std::string& filename)
 {
     std::string line;
     std::ifstream file(filename);

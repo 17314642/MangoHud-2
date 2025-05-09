@@ -1,38 +1,13 @@
 #include "amdgpu.hpp"
 
 AMDGPU::AMDGPU(
-    const std::string drm_node, const std::string pci_dev,
+    const std::string& drm_node, const std::string& pci_dev,
     uint16_t vendor_id, uint16_t device_id
-) : GPUWithHwmon(drm_node, pci_dev, vendor_id, device_id) {
+) : GPU(drm_node, pci_dev, vendor_id, device_id) {
     pthread_setname_np(worker_thread.native_handle(), "gpu-amdgpu");
-    init_hwmon();
-    init_sysfs_sensors();
-}
 
-void AMDGPU::init_hwmon() {
-    std::vector<hwmon_sensor> sensors = {
-        { "temp"        , "temp1_input"     },
-        { "frequency"   , "freq1_input"     }
-    };
-
-    hwmon.drm_node = drm_node;
-    hwmon.base_dir = hwmon.find_hwmon_dir();
-    hwmon.add_sensors(sensors);
-    hwmon.setup();
-}
-
-void AMDGPU::init_sysfs_sensors() {
-    std::vector<hwmon_sensor> sensors = {
-        { "load"        , "gpu_busy_percent"    },
-        { "vram_used"   , "mem_info_vram_used"  },
-        { "gtt_used"    , "mem_info_gtt_used"   },
-        { "vram_total"  , "mem_info_vram_total" },
-    };
-
-    sysfs_hwmon.drm_node = drm_node;
     sysfs_hwmon.base_dir = "/sys/class/drm/" + drm_node + "/device";
-    sysfs_hwmon.add_sensors(sensors);
-    sysfs_hwmon.setup();
+    sysfs_hwmon.setup(sysfs_sensors);
 }
 
 void AMDGPU::poll_overrides() {

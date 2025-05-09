@@ -2,7 +2,7 @@
 
 #include "gpu.hpp"
 #include "intel.hpp"
-#include "amdgpu.hpp"
+//#include "amdgpu.hpp"
 #include "../common/helpers.hpp"
 
 GPUS::GPUS() {
@@ -32,7 +32,7 @@ GPUS::GPUS() {
     });
 
     // Now process the sorted GPU entries
-    uint8_t idx = 0, total_active = 0;
+    uint8_t /*idx = 0,*/ total_active = 0;
 
     for (const auto& drm_node : gpu_entries) {
         std::string path = "/sys/class/drm/" + drm_node;
@@ -72,9 +72,9 @@ GPUS::GPUS() {
 
         if (vendor_id == 0x8086) {
             gpu = std::make_shared<Intel>(drm_node, pci_dev, vendor_id, device_id);
-        } else if (vendor_id == 0x1002) {
+        }/* else if (vendor_id == 0x1002) {
             gpu = std::make_shared<AMDGPU>(drm_node, pci_dev, vendor_id, device_id);
-        } else {
+        }*/ else {
             continue;
         }
 
@@ -112,7 +112,7 @@ GPUS::GPUS() {
     }
 }
 
-std::string GPUS::get_pci_device_address(const std::string drm_card_path) {
+std::string GPUS::get_pci_device_address(const std::string& drm_card_path) {
     // /sys/class/drm/renderD128/device/subsystem -> /sys/bus/pci
     auto subsystem = fs::canonical(drm_card_path + "/device/subsystem").string();
     auto idx = subsystem.rfind("/") + 1; // /sys/bus/pci
@@ -132,17 +132,34 @@ std::string GPUS::get_pci_device_address(const std::string drm_card_path) {
     return pci_addr.substr(idx); // 0000:03:00.0
 }
 
+void GPU::check_pids_existence() {
+    std::set<pid_t> pids_to_delete;
+
+    for (const auto& p : process_metrics) {
+        pid_t pid = p.first;
+
+        if (!fs::exists("/proc/" + std::to_string(pid)))
+            pids_to_delete.insert(pid);
+    }
+
+    for (const auto& p : pids_to_delete)
+        process_metrics.erase(p);
+}
+
 void GPU::poll() {
     while (!stop_thread) {
         SPDLOG_DEBUG("poll()");
 
+        auto current_time = std::chrono::steady_clock::now();
+        delta_time_ns = current_time - previous_time;
+        previous_time = current_time;
+
         poll_overrides();
 
-        gpu_metrics cur_metrics = {
+        gpu_metrics_system cur_sys_metrics = {
             .load                   = get_load(),
 
-            .sys_vram_used          = get_sys_vram_used(),
-            .proc_vram_used         = get_proc_vram_used(),
+            .vram_used              = get_vram_used(),
             .gtt_used               = get_gtt_used(),
             .memory_total           = get_memory_total(),
             .memory_clock           = get_memory_clock(),
@@ -169,11 +186,103 @@ void GPU::poll() {
             .fan_rpm                = get_fan_rpm()
         };
 
+        check_pids_existence();
+
+        std::map<pid_t, gpu_metrics_process> cur_proc_metrics = process_metrics;
+
+        for (auto& p : cur_proc_metrics) {
+            pid_t pid = p.first;
+            gpu_metrics_process* m = &p.second;
+
+            m->load = get_process_load(pid);
+            m->vram_used = get_process_vram_used(pid);
+            m->gtt_used = get_process_gtt_used(pid);
+        }
+
         {
-            std::unique_lock lock(metrics_mutex);
-            metrics = cur_metrics;
+            std::unique_lock sys_lock(system_metrics_mutex);
+            std::unique_lock proc_lock(process_metrics_mutex);
+            system_metrics = cur_sys_metrics;
+            process_metrics = cur_proc_metrics;
         }
 
         std::this_thread::sleep_for(1s);
     }
+}
+
+GPU::GPU(
+    const std::string& drm_node, const std::string& pci_dev,
+    uint16_t vendor_id, uint16_t device_id
+) : drm_node(drm_node), pci_dev(pci_dev), vendor_id(vendor_id), device_id(device_id) {
+    worker_thread = std::thread(&GPU::poll, this);
+}
+
+GPU::~GPU() {
+    stop_thread = true;
+    if (worker_thread.joinable())
+        worker_thread.join();
+}
+
+void GPU::add_pid(pid_t pid) {
+    std::unique_lock lock(process_metrics_mutex);
+    process_metrics.try_emplace(pid, gpu_metrics_process());
+}
+
+gpu_metrics_system GPU::get_system_metrics() {
+    SPDLOG_DEBUG("GPU get_system_metrics()");
+    std::unique_lock lock(system_metrics_mutex);
+    return system_metrics;
+}
+
+std::map<pid_t, gpu_metrics_process> GPU::get_process_metrics() {
+    SPDLOG_DEBUG("GPU get_process_metrics");
+    std::unique_lock lock(process_metrics_mutex);
+    return process_metrics;
+}
+
+void GPU::print_metrics() {
+    std::unique_lock sys_lock(system_metrics_mutex);
+    std::unique_lock proc_lock(process_metrics_mutex);
+
+    SPDLOG_TRACE("==========================");
+    SPDLOG_TRACE("load                 = {}\n", system_metrics.load);
+
+    // SPDLOG_TRACE("vram_used            = {}", vram_used);
+    // SPDLOG_TRACE("gtt_used             = {}", gtt_used);
+    // SPDLOG_TRACE("memory_total         = {}", memory_total);
+    // SPDLOG_TRACE("memory_clock         = {}", memory_clock);
+    // SPDLOG_TRACE("memory_temp          = {}\n", memory_temp);
+
+    // SPDLOG_TRACE("temperature          = {}", temperature);
+    // SPDLOG_TRACE("junction_temperature = {}\n", junction_temperature);
+
+    // SPDLOG_TRACE("core_clock           = {}", core_clock);
+    SPDLOG_TRACE("voltage              = {}\n", system_metrics.voltage);
+
+    SPDLOG_TRACE("power_usage          = {}", system_metrics.power_usage);
+    SPDLOG_TRACE("power_limit          = {}\n", system_metrics.power_limit);
+
+    // SPDLOG_TRACE("apu_cpu_power        = {}", apu_cpu_power);
+    // SPDLOG_TRACE("apu_cpu_temp         = {}\n", apu_cpu_temp);
+
+    // SPDLOG_TRACE("is_power_throttled   = {}", is_power_throttled);
+    // SPDLOG_TRACE("is_current_throttled = {}", is_current_throttled);
+    // SPDLOG_TRACE("is_temp_throttled    = {}", is_temp_throttled);
+    // SPDLOG_TRACE("is_other_throttled   = {}\n", is_other_throttled);
+
+    // SPDLOG_TRACE("fan_speed            = {}", fan_speed);
+    // SPDLOG_TRACE("fan_rpm              = {}\n", fan_rpm);
+
+    SPDLOG_TRACE("Process stats:");
+
+    for (const auto& p : process_metrics) {
+        pid_t pid = p.first;
+        gpu_metrics_process m = p.second;
+        SPDLOG_TRACE("    {}:", pid);
+        SPDLOG_TRACE("        load      = {}", m.load);
+        SPDLOG_TRACE("        vram_used = {}", m.vram_used);
+        SPDLOG_TRACE("        gtt_used  = {}\n", m.gtt_used);
+    }
+
+    SPDLOG_TRACE("==========================\n");
 }

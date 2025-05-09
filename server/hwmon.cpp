@@ -1,6 +1,14 @@
 #include "hwmon.hpp"
 
-void Hwmon::find_sensors() {
+void HwmonBase::add_sensors(const std::vector<hwmon_sensor>& input_sensors)
+{
+    for (const auto& s : input_sensors) {
+        sensors[s.generic_name].use_regex = s.use_regex;
+        sensors[s.generic_name].filename = s.filename;
+    }
+}
+
+void HwmonBase::find_sensors() {
     if (base_dir.empty()) {
         SPDLOG_WARN("hwmon: base_dir is empty. hwmon will not work!");
         return;
@@ -36,7 +44,7 @@ void Hwmon::find_sensors() {
     }
 };
 
-void Hwmon::open_sensors() {
+void HwmonBase::open_sensors() {
     for (auto& s : sensors) {
         auto key = s.first;
         auto sensor = &s.second;
@@ -60,7 +68,7 @@ void Hwmon::open_sensors() {
     }
 }
 
-std::string Hwmon::find_hwmon_dir() {
+std::string HwmonBase::find_hwmon_dir(const std::string& drm_node) {
     std::string d = "/sys/class/drm/" + drm_node + "/device/hwmon";
 
     if (!fs::exists(d)) {
@@ -79,11 +87,13 @@ std::string Hwmon::find_hwmon_dir() {
     return hwmon;
 }
 
-std::string Hwmon::find_hwmon_dir_by_name(std::string name) {
+std::string HwmonBase::find_hwmon_dir_by_name(const std::string& name) {
     std::string d = "/sys/class/hwmon/";
 
-    if (!fs::exists(d))
+    if (!fs::exists(d)) {
+        SPDLOG_DEBUG("hwmon: hwmon directory doesn't exist (custom linux kernel?)");
         return "";
+    }
 
     for (const auto &entry : fs::directory_iterator(d)) {
         auto hwmon_dir = entry.path().string();
@@ -107,15 +117,17 @@ std::string Hwmon::find_hwmon_dir_by_name(std::string name) {
     return "";
 }
 
-void Hwmon::add_sensors(const std::vector<hwmon_sensor>& input_sensors)
-{
-    for (auto& s : input_sensors) {
-        sensors[s.generic_name].use_regex = s.use_regex;
-        sensors[s.generic_name].filename = s.filename;
-    }
+void HwmonBase::setup(const std::vector<hwmon_sensor>& input_sensors, const std::string& drm_node) {
+    add_sensors(input_sensors);
+
+    if (base_dir.empty())
+        base_dir = find_hwmon_dir(drm_node);
+
+    find_sensors();
+    open_sensors();
 }
 
-void Hwmon::poll_sensors()
+void HwmonBase::poll_sensors()
 {
     for (auto& s : sensors) {
         auto name = s.first;
@@ -136,13 +148,7 @@ void Hwmon::poll_sensors()
     }
 }
 
-void Hwmon::setup()
-{
-    find_sensors();
-    open_sensors();
-}
-
-uint64_t Hwmon::get_sensor_value(const std::string generic_name)
+uint64_t HwmonBase::get_sensor_value(const std::string& generic_name)
 {
     if (sensors.find(generic_name) == sensors.end())
         return 0;
