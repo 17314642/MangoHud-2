@@ -1,4 +1,4 @@
-#include "amdgpu.hpp"
+/*#include "amdgpu.hpp"
 
 AMDGPU::AMDGPU(
     const std::string& drm_node, const std::string& pci_dev,
@@ -48,3 +48,4 @@ int AMDGPU::get_temperature() {
 int AMDGPU::get_core_clock() {
     return hwmon.get_sensor_value("frequency") / 1'000'000.f;
 }
+*/

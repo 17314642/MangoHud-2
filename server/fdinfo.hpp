@@ -28,13 +28,18 @@ public:
     void poll();
 };
 
-struct FDInfo {
-    std::mutex pids_fdinfo_mutex;
-    std::map<pid_t, FDInfoBase> pids_fdinfo;
+struct FDInfoWrapper {
+    std::mutex pids_mutex;
+    std::map<pid_t, FDInfoBase> pids;
     const std::string drm_node;
 
-    explicit FDInfo(const std::string& drm_node) : drm_node(drm_node) {}
+    explicit FDInfoWrapper(const std::string& drm_node) : drm_node(drm_node) {}
 
-    void add_fdinfo_pid(pid_t pid);
-    void poll_all_fdinfos();
+    void add_pid(pid_t pid);
+    void poll_all();
+};
+
+struct FDInfo {
+    FDInfoWrapper fdinfo;
+    explicit FDInfo(const std::string& drm_node);
 };

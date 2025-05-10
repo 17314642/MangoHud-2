@@ -116,17 +116,17 @@ void FDInfoBase::open_fds(const std::vector<std::string>& fds) {
     SPDLOG_DEBUG("Received {} ids, opened {} unique ids", fds.size(), total);
 }
 
-void FDInfo::add_fdinfo_pid(pid_t pid) {
+void FDInfoWrapper::add_pid(pid_t pid) {
     SPDLOG_DEBUG("adding pid {} to fdinfo", pid);
-    std::unique_lock lock(pids_fdinfo_mutex);
-    pids_fdinfo.insert({pid, FDInfoBase(drm_node, pid)});
+    std::unique_lock lock(pids_mutex);
+    pids.try_emplace(pid, FDInfoBase(drm_node, pid));
 }
 
-void FDInfo::poll_all_fdinfos() {
-    std::unique_lock lock(pids_fdinfo_mutex);
+void FDInfoWrapper::poll_all() {
+    std::unique_lock lock(pids_mutex);
     std::set<pid_t> pids_to_delete;
 
-    for (auto& p : pids_fdinfo) {
+    for (auto& p : pids) {
         pid_t pid = p.first;
         FDInfoBase* data = &p.second;
 
@@ -140,6 +140,8 @@ void FDInfo::poll_all_fdinfos() {
 
     for (const auto& p : pids_to_delete) {
         SPDLOG_TRACE("deleting pid {}", p);
-        pids_fdinfo.erase(p);
+        pids.erase(p);
     }
 }
+
+FDInfo::FDInfo(const std::string& drm_node) : fdinfo(FDInfoWrapper(drm_node)) {}

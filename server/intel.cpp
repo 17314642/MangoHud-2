@@ -10,7 +10,7 @@ Intel::Intel(
 
 void Intel::poll_overrides() {
     hwmon.poll_sensors();
-    poll_all_fdinfos();
+    fdinfo.poll_all();
 }
 
 // gpu_metrics Intel::get_metrics() {
@@ -79,7 +79,7 @@ int Intel::get_process_load(pid_t pid) {
 float Intel::get_fdinfo_memory_used(pid_t pid, const std::string& key) {
     float total = 0;
 
-    for (const auto& fd_pid : pids_fdinfo) {
+    for (const auto& fd_pid : fdinfo.pids) {
         if (fd_pid.first != pid)
             continue;
 
@@ -118,7 +118,7 @@ uint64_t Intel::get_pid_gpu_time(pid_t pid)
 {
     uint64_t total = 0;
 
-    for (const auto& fd_pid : pids_fdinfo) {
+    for (const auto& fd_pid : fdinfo.pids) {
         if (fd_pid.first != pid)
             continue;
 

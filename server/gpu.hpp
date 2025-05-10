@@ -15,44 +15,10 @@
 #include <pthread.h>
 #include <spdlog/spdlog.h>
 
+#include "../common/gpu_metrics.hpp"
+
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
-
-struct gpu_metrics_process {
-    int     load;
-    float   vram_used;
-    float   gtt_used;
-};
-
-struct gpu_metrics_system {
-    int     load;
-
-    float   vram_used;
-    float   gtt_used;
-    float   memory_total;
-    int     memory_clock;
-    int     memory_temp;
-
-    int     temperature;
-    int     junction_temperature;
-
-    int     core_clock;
-    int     voltage;
-
-    float   power_usage;
-    float   power_limit;
-
-    float   apu_cpu_power;
-    int     apu_cpu_temp;
-
-    bool    is_power_throttled;
-    bool    is_current_throttled;
-    bool    is_temp_throttled;
-    bool    is_other_throttled;
-
-    int     fan_speed;
-    bool    fan_rpm;
-};
 
 class GPU {
 protected:
