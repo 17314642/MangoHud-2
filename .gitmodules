@@ -1,0 +1,6 @@
+[submodule "mangohud-client"]
+	path = mangohud-client
+	url = git@github.com:17314642/mangohud-client
+[submodule "mangohud-server"]
+	path = mangohud-server
+	url = git@github.com:17314642/mangohud-server
